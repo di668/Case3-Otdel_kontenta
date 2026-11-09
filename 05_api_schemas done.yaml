@@ -1,0 +1,230 @@
+# API платформы чаевых — кейс 3
+#
+# Как заполнять:
+#   1. Health и QRPayload — образцы, не трогать.
+#   2. Заполни Payment, QRResponse, TipCreate, Report, Error.
+#   3. Проверь на https://editor.swagger.io/
+
+openapi: 3.0.3
+info:
+  title: Tips Platform
+  version: "1.0.0"
+  description: Онлайн-чаевые для сети «Вкус-Сервис»
+
+servers:
+  - url: http://localhost:8083
+
+# ---------- ОБРАЗЕЦ ----------
+components:
+  schemas:
+    QRPayload:
+      type: object
+      required: [merchant_id, employee_id, receipt_id, nonce, exp, signature]
+      properties:
+        merchant_id: {type: string, pattern: '^m_[0-9]{3}$'}
+        employee_id: {type: string, pattern: '^e_[0-9]{3}$'}
+        receipt_id: {type: string, pattern: '^r_[0-9]{4}$'}
+        nonce: {type: string, pattern: '^[a-f0-9]{6}$'}
+        exp: {type: string, format: date-time}
+        signature: {type: string, pattern: '^[a-f0-9]{16}$'}
+
+# ---------- TODO ----------
+    QRResponse:
+      type: object
+      required: [qr_id, merchant_id, employee_id, employee_name, receipt_id, base_amount, currency, tip_options]
+      properties:
+        qr_id: {type: string, pattern: '^qr_[0-9]{3}$'}
+        merchant_id: {type: string, pattern: '^m_[0-9]{3}$'}
+        employee_id: {type: string, pattern: '^e_[0-9]{3}$'}
+        employee_name: {type: string}
+        receipt_id: {type: string, pattern: '^r_[0-9]{4}$'}
+        base_amount: {type: number, format: double, minimum: 0.01, maximum: 1000000}
+        currency: {type: string, enum: [RUB]}
+        tip_options: {type: array, items: {type: integer, enum: [0, 5, 10, 15, 20]}}
+        # TODO: qr_id, merchant_id, employee_id, employee_name,
+        #       receipt_id, base_amount, currency, tip_options
+        
+
+    TipCreate:
+      type: object
+      required: [qr_id, receipt_id, base_amount, tip_pct]
+      properties:
+        qr_id: {type: string, pattern: '^qr_[0-9]{3}$'}
+        receipt_id: {type: string, pattern:  '^r_[0-9]{4}$'}
+        base_amount: {type: number, format: double, minimum: 0, maximum: 1000000}
+        tip_pct: {type: number, format: double, minimum: 0}
+        idempotency_key: {type: string, minLength: 1, maxLength: 128}
+        # TODO: qr_id, receipt_id, base_amount, tip_pct (0..50),
+        #       idempotency_key
+        
+
+    Payment:
+      type: object
+      required: [payment_id, status, amount_total, tip_amount]
+      properties:
+        payment_id: {type: string, pattern:  '^p_[0-9]{4}$'}
+        status: {type: string, enum: [CREATED, PENDING, SUCCESS, DECLINED, CANCELED]}
+        amount_total: {type: number, format: double, minimum: 0}
+        tip_amount: {type: number, format: double, minimum: 0}
+        confirm_token: {type: string, nullable: true}
+        error_code: {type: string, nullable: true}
+        # TODO: payment_id, status (CREATED/PENDING/SUCCESS/DECLINED/CANCELED),
+        #       amount_total, tip_amount, confirm_token, error_code
+        
+
+    Report:
+      type: object
+      required: [merchant_id, period, tips_total, payments_count, avg_tip_pct, success_rate]
+      properties:
+        merchant_id: {type: string, pattern: '^m_[0-9]{3}$'}
+        tips_total: {type: number, format: double, minimum: 0}
+        payments_count: {type: integer, minimum: 0}
+        avg_tip_pct: {type: number, format: double, minimum: 0}
+        success_rate: {type: number, format: double, minimum: 0, maximum: 1}
+        # TODO: merchant_id, period, tips_total, payments_count,
+        #       avg_tip_pct, success_rate
+        
+
+    Error:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code: {type: string}
+        message: {type: string}
+        retryable: {type: boolean}
+        details: {type: object, nullable: true, additionalProperties: true}
+        # TODO: error_code, message, retryable, details
+        
+
+paths:
+  # ---------- ОБРАЗЕЦ ----------
+  /health:
+    get:
+      summary: Проверка живости
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {type: object, properties: {status: {type: string}}}
+
+  # ---------- TODO ----------
+  /api/v1/qr/{qr_id}:
+    get:
+      summary: TODO — данные QR для формы чаевых
+      parameters: [{name: qr_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200':
+          description: QR действителен
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QRResponse'}
+        '404':
+          description: QR не найден
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '410': 
+          description: QR просрочен
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422':
+          description: QR недействителен
+          content: 
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+          
+
+      # TODO: responses 200 (QRResponse), 404, 410 (QR_EXPIRED), 422 (INVALID_QR)
+      
+
+  /api/v1/tips:
+    post:
+      summary: TODO — создать платёж с чаевыми
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TipCreate'}
+      responses:
+        '201':
+          description: Платеж создан
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Payment'}
+        '409':
+          description:
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422':
+          description: Данные платежа некорректны
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+                # TODO: requestBody TipCreate, responses 201 (Payment), 409, 422
+      
+
+  /api/v1/payments/{id}/confirm:
+    post:
+      summary: TODO — подтвердить платёж
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: 
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Payment'}
+        '402':
+          description: Платеж отколнен
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '409':
+          description: Платеж нельзя подтвердить
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}     
+      # TODO: responses 200, 402, 409
+      
+
+  /api/v1/payments/{id}/cancel:
+    post:
+      summary: TODO — отменить платёж (до подтверждения)
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Payment'}
+        '409':
+          description: Невозможно отменить
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+      # TODO: responses 200, 409
+      
+
+  /api/v1/reports/tips:
+    get:
+      summary: TODO — отчёт по чаевым
+      parameters:
+        - {name: merchant_id, in: query, required: true, schema: {type: string}}
+        - {name: from, in: query, required: true, schema: {type: string, format: date}}
+        - {name: to, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Report'}
+        '403':
+          description: Нет доступа к отчету
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+      # TODO: responses 200 (Report), 403
+      
